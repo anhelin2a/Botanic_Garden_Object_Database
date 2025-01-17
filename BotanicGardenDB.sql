@@ -1,4 +1,4 @@
--- Typ dla strefy klimatycznej
+-- typ dla strefy klimatycznej
 CREATE TYPE strefa_klimatyczna_t AS OBJECT (
     id_strefy NUMBER,
     nazwa VARCHAR2(100),
@@ -7,7 +7,7 @@ CREATE TYPE strefa_klimatyczna_t AS OBJECT (
     wilgotnosc NUMBER
 );
 
--- Typ dla lokalizacji
+-- typ dla lokalizacji
 CREATE TYPE lokalizacja_t AS OBJECT (
     id_lokalizacji NUMBER,
     nazwa VARCHAR2(100),
@@ -16,7 +16,7 @@ CREATE TYPE lokalizacja_t AS OBJECT (
     opis VARCHAR2(500)
 );
 
--- Typ dla gatunku
+-- typ dla gatunku
 CREATE TYPE gatunek_t AS OBJECT (
     id_gatunku NUMBER,
     nazwa_lacinska VARCHAR2(100),
@@ -26,17 +26,17 @@ CREATE TYPE gatunek_t AS OBJECT (
     opis CLOB
 );
 
--- Typ dla etykiety
+-- typ dla etykiety
 CREATE TYPE etykieta_t AS OBJECT (
     id_etykiety NUMBER,
     nazwa VARCHAR2(100),
     opis VARCHAR2(500)
 );
 
--- Kolekcja etykiet
+-- kolekcja etykiet
 CREATE TYPE etykiety_tab_t AS TABLE OF etykieta_t;
 
--- Typ dla zagro¿enia
+-- typ dla zagrozenia
 CREATE TYPE zagrozenie_t AS OBJECT (
     id_zagrozenia NUMBER,
     nazwa VARCHAR2(100),
@@ -45,22 +45,22 @@ CREATE TYPE zagrozenie_t AS OBJECT (
     opis VARCHAR2(500)
 );
 
--- Kolekcja zagro¿eñ
+-- kolekcja zagrozen
 CREATE TYPE zagrozenia_tab_t AS TABLE OF zagrozenie_t;
 
--- Typ dla sezonu
+-- typ dla sezonu
 CREATE TYPE sezon_t AS OBJECT (
     id_sezonu NUMBER,
     nazwa VARCHAR2(50),
     data_rozpoczecia DATE,
     data_zakonczenia DATE,
-    typ VARCHAR2(50) -- kwitnienie, owocowanie, pielêgnacja
+    typ VARCHAR2(50) -- kwitnienie, owocowanie, pielegnacja
 );
 
--- Kolekcja sezonów
+-- kolekcja sezonow
 CREATE TYPE sezony_tab_t AS TABLE OF sezon_t;
 
--- Typ dla dostawcy
+-- typ dla dostawcy
 CREATE TYPE dostawca_t AS OBJECT (
     id_dostawcy NUMBER,
     nazwa VARCHAR2(100),
@@ -70,7 +70,7 @@ CREATE TYPE dostawca_t AS OBJECT (
     email VARCHAR2(100)
 );
 
--- Typ dla harmonogramu pracy
+-- typ dla harmonogramu pracy
 CREATE TYPE harmonogram_t AS OBJECT (
     id_harmonogramu NUMBER,
     data_od DATE,
@@ -79,7 +79,7 @@ CREATE TYPE harmonogram_t AS OBJECT (
     godziny_do VARCHAR2(5)
 );
 
--- Typ dla pracownika
+-- typ dla pracownika
 CREATE TYPE pracownik_t AS OBJECT (
     id_pracownika NUMBER,
     imie VARCHAR2(50),
@@ -89,9 +89,10 @@ CREATE TYPE pracownik_t AS OBJECT (
     harmonogram REF harmonogram_t,
     telefon VARCHAR2(20),
     email VARCHAR2(100)
+    --placa NUMBER
 );
 
--- Typ dla zabiegu pielêgnacyjnego
+-- typ dla zabiegu pielgnacyjnego
 CREATE TYPE zabieg_t AS OBJECT (
     id_zabiegu NUMBER,
     nazwa VARCHAR2(100),
@@ -101,10 +102,10 @@ CREATE TYPE zabieg_t AS OBJECT (
     koszt NUMBER
 );
 
--- Kolekcja zabiegów
+-- kolekcja zabiegow
 CREATE TYPE zabiegi_tab_t AS TABLE OF zabieg_t;
 
--- Typ dla roœliny (g³ówny obiekt)
+-- typ dla rosliny (glowny obiekt)
 CREATE TYPE roslina_t AS OBJECT (
     id_rosliny NUMBER,
     nazwa VARCHAR2(100),
@@ -120,7 +121,7 @@ CREATE TYPE roslina_t AS OBJECT (
     zagrozenia zagrozenia_tab_t,
     sezony sezony_tab_t,
     
-    -- Metody
+    -- metody
     MEMBER FUNCTION wiek RETURN NUMBER,
     MEMBER FUNCTION koszt_utrzymania RETURN NUMBER,
     MEMBER PROCEDURE dodaj_zabieg(p_zabieg zabieg_t),
@@ -128,9 +129,42 @@ CREATE TYPE roslina_t AS OBJECT (
     MEMBER PROCEDURE dodaj_zagrozenie(p_zagrozenie zagrozenie_t)
 );
 
-
+CREATE OR REPLACE TYPE BODY roslina_t AS
+    MEMBER FUNCTION wiek RETURN NUMBER IS
+    BEGIN
+        RETURN TRUNC(MONTHS_BETWEEN(SYSDATE, data_zasadzenia) / 12);
+    END;
+    
+    MEMBER FUNCTION koszt_utrzymania RETURN NUMBER IS
+        v_suma NUMBER := 0;
+    BEGIN
+        FOR i IN 1..zabiegi.COUNT LOOP
+            v_suma := v_suma + zabiegi(i).koszt;
+        END LOOP;
+        RETURN v_suma;
+    END;
+    
+    MEMBER PROCEDURE dodaj_zabieg(p_zabieg zabieg_t) IS
+    BEGIN
+        zabiegi.EXTEND;
+        zabiegi(zabiegi.LAST) := p_zabieg;
+    END;
+    
+    MEMBER PROCEDURE dodaj_etykiete(p_etykieta etykieta_t) IS
+    BEGIN
+        etykiety.EXTEND;
+        etykiety(etykiety.LAST) := p_etykieta;
+    END;
+    
+    MEMBER PROCEDURE dodaj_zagrozenie(p_zagrozenie zagrozenie_t) IS
+    BEGIN
+        zagrozenia.EXTEND;
+        zagrozenia(zagrozenia.LAST) := p_zagrozenie;
+    END;
+END;
+/
 ---------
--- Tworzenie tabel dla podstawowych typów
+-- tworzenie tabel dla podstawowych typow
 CREATE TABLE strefy_klimatyczne OF strefa_klimatyczna_t (
     PRIMARY KEY (id_strefy)
 );
@@ -155,21 +189,27 @@ CREATE TABLE pracownicy OF pracownik_t (
     PRIMARY KEY (id_pracownika)
 );
 
--- Tabela g³ówna dla roœlin
-CREATE TABLE rosliny OF roslina_t (
-    PRIMARY KEY (id_rosliny)
-);
+CREATE TABLE rosliny OF roslina_t
+NESTED TABLE zabiegi STORE AS tab_zabiegi
+NESTED TABLE etykiety STORE AS tab_etykiety
+NESTED TABLE zagrozenia STORE AS tab_zagrozenia
+NESTED TABLE sezony STORE AS tab_sezony;
+/
 
-NESTED TABLE zabiegi STORE AS zabiegi_tab,
-NESTED TABLE etykiety STORE AS etykiety_tab,
-NESTED TABLE zagrozenia STORE AS zagrozenia_tab,
-NESTED TABLE sezony STORE AS sezony_tab;
+SELECT * FROM user_types WHERE type_name IN (
+    'ZABIEGI_TAB_T',
+    'ETYKIETY_TAB_T',
+    'ZAGROZENIA_TAB_T',
+    'SEZONY_TAB_T'
+);
+SELECT * FROM user_types WHERE type_name = 'ROSLINA_T';
+
 
 -------------------------------------------------------
 
--- Pakiet do zarz¹dzania roœlinami
+-- pakiet do zarzadzania roslinami
 CREATE OR REPLACE PACKAGE zarzadzanie_roslinami AS
-    -- Dodawanie nowej roœliny
+    -- dodawanie nowej rosliny
     PROCEDURE dodaj_rosline(
         p_nazwa VARCHAR2,
         p_gatunek_id NUMBER,
@@ -179,13 +219,13 @@ CREATE OR REPLACE PACKAGE zarzadzanie_roslinami AS
         p_wysokosc NUMBER
     );
     
-    -- Przenoszenie roœliny do nowej lokalizacji
+    -- przenoszenie rosliny do nowej lokalizacji
     PROCEDURE przenies_rosline(
         p_id_rosliny NUMBER,
         p_nowa_lokalizacja_id NUMBER
     );
     
-    -- Dodawanie zabiegu pielêgnacyjnego
+    -- dodawanie zabiegu pielgnacyjnego
     PROCEDURE dodaj_zabieg(
         p_id_rosliny NUMBER,
         p_nazwa_zabiegu VARCHAR2,
@@ -193,30 +233,30 @@ CREATE OR REPLACE PACKAGE zarzadzanie_roslinami AS
         p_koszt NUMBER
     );
     
-    -- Aktualizacja stanu zdrowia roœliny
+    -- aktualizacja stanu zdrowia rosliny
     PROCEDURE aktualizuj_stan_zdrowia(
         p_id_rosliny NUMBER,
         p_stan VARCHAR2
     );
     
-    -- Pobranie wieku roœliny
+    -- pobranie wieku rosliny
     FUNCTION pobierz_wiek_rosliny(
         p_id_rosliny NUMBER
     ) RETURN NUMBER;
     
-    -- Pobranie ca³kowitego kosztu utrzymania roœliny
+    -- pobranie calkowitego kosztu utrzymania rosliny
     FUNCTION pobierz_koszt_utrzymania(
         p_id_rosliny NUMBER
     ) RETURN NUMBER;
     
-    -- Pobranie historii zabiegów
+    -- pobranie historii zabiegow
     FUNCTION pobierz_historie_zabiegow(
         p_id_rosliny NUMBER
     ) RETURN zabiegi_tab_t;
 END zarzadzanie_roslinami;
 /
 
--- Implementacja pakietu zarz¹dzania roœlinami
+-- implementacja pakietu zarzadzania roslinami
 CREATE OR REPLACE PACKAGE BODY zarzadzanie_roslinami AS
     PROCEDURE dodaj_rosline(
         p_nazwa VARCHAR2,
@@ -245,10 +285,10 @@ CREATE OR REPLACE PACKAGE BODY zarzadzanie_roslinami AS
         SELECT REF(d) INTO v_dostawca_ref
         FROM dostawcy d WHERE d.id_dostawcy = p_dostawca_id;
         
-        -- Generujemy nowe ID
+        -- generujemy nowe ID
         SELECT NVL(MAX(id_rosliny), 0) + 1 INTO v_id FROM rosliny;
         
-        -- Wstawiamy now¹ roœlinê
+        -- wstawiamy nowa rosline
         INSERT INTO rosliny VALUES (
             roslina_t(
                 v_id,
@@ -270,7 +310,7 @@ CREATE OR REPLACE PACKAGE BODY zarzadzanie_roslinami AS
     EXCEPTION
         WHEN OTHERS THEN
             ROLLBACK;
-            RAISE_APPLICATION_ERROR(-20001, 'B³¹d podczas dodawania roœliny: ' || SQLERRM);
+            RAISE_APPLICATION_ERROR(-20001, 'Blad podczas dodawania rosliny: ' || SQLERRM);
     END dodaj_rosline;
 
     PROCEDURE przenies_rosline(
@@ -279,11 +319,11 @@ CREATE OR REPLACE PACKAGE BODY zarzadzanie_roslinami AS
     ) IS
         v_lokalizacja_ref REF lokalizacja_t;
     BEGIN
-        -- Pobieramy referencjê do nowej lokalizacji
+        -- pobieramy referencje do nowej lokalizacji
         SELECT REF(l) INTO v_lokalizacja_ref
         FROM lokalizacje l WHERE l.id_lokalizacji = p_nowa_lokalizacja_id;
         
-        -- Aktualizujemy lokalizacjê roœliny
+        -- aktualizujemy lokalizacje rosliny
         UPDATE rosliny r
         SET r.lokalizacja = v_lokalizacja_ref
         WHERE r.id_rosliny = p_id_rosliny;
@@ -292,16 +332,145 @@ CREATE OR REPLACE PACKAGE BODY zarzadzanie_roslinami AS
     EXCEPTION
         WHEN OTHERS THEN
             ROLLBACK;
-            RAISE_APPLICATION_ERROR(-20002, 'B³¹d podczas przenoszenia roœliny: ' || SQLERRM);
+            RAISE_APPLICATION_ERROR(-20002, 'Blad podczas przenoszenia rosliny: ' || SQLERRM);
     END przenies_rosline;
+    
+    PROCEDURE dodaj_zabieg(
+        p_id_rosliny NUMBER,
+        p_nazwa_zabiegu VARCHAR2,
+        p_pracownik_id NUMBER,
+        p_koszt NUMBER
+    ) IS
+        v_pracownik_ref REF pracownik_t;
+        v_id NUMBER;
+        v_zabieg zabieg_t;
+    BEGIN
+        -- Pobieramy referencjï¿½ do pracownika
+        SELECT REF(p) INTO v_pracownik_ref
+        FROM pracownicy p 
+        WHERE p.id_pracownika = p_pracownik_id;
+        
+        -- Generujemy nowe ID dla zabiegu
+        SELECT NVL(MAX(z.id_zabiegu), 0) + 1 INTO v_id
+        FROM TABLE(SELECT r.zabiegi FROM rosliny r WHERE r.id_rosliny = p_id_rosliny) z;
+        
+        -- Tworzymy nowy zabieg
+        v_zabieg := zabieg_t(
+            v_id, 
+            p_nazwa_zabiegu, 
+            SYSDATE, 
+            'Standardowy zabieg pielï¿½gnacyjny', 
+            v_pracownik_ref, 
+            p_koszt
+        );
+        
+        -- Dodajemy zabieg do kolekcji
+        UPDATE rosliny r
+        SET r.zabiegi = r.zabiegi MULTISET UNION ALL zabiegi_tab_t(v_zabieg)
+        WHERE r.id_rosliny = p_id_rosliny;
+        
+        COMMIT;
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            ROLLBACK;
+            RAISE_APPLICATION_ERROR(-20003, 'Nie znaleziono roï¿½liny lub pracownika');
+        WHEN OTHERS THEN
+            ROLLBACK;
+            RAISE_APPLICATION_ERROR(-20004, 'Bï¿½ï¿½d podczas dodawania zabiegu: ' || SQLERRM);
+    END dodaj_zabieg;
 
-    -- Pozosta³e implementacje funkcji...
+    PROCEDURE aktualizuj_stan_zdrowia(
+        p_id_rosliny NUMBER,
+        p_stan VARCHAR2
+    ) IS
+        v_count NUMBER;
+    BEGIN
+        -- Sprawdzamy czy roï¿½lina istnieje
+        SELECT COUNT(*) INTO v_count
+        FROM rosliny
+        WHERE id_rosliny = p_id_rosliny;
+        
+        IF v_count = 0 THEN
+            RAISE_APPLICATION_ERROR(-20005, 'Nie znaleziono roï¿½liny o ID: ' || p_id_rosliny);
+        END IF;
+        
+        -- Sprawdzamy poprawnoï¿½ï¿½ stanu zdrowia
+        IF p_stan NOT IN ('Dobry', 'ï¿½redni', 'Zï¿½y', 'Krytyczny') THEN
+            RAISE_APPLICATION_ERROR(-20006, 'Nieprawidï¿½owy stan zdrowia. Dozwolone wartoï¿½ci: Dobry, ï¿½redni, Zï¿½y, Krytyczny');
+        END IF;
+        
+        -- Aktualizujemy stan zdrowia
+        UPDATE rosliny r
+        SET r.stan_zdrowia = p_stan
+        WHERE r.id_rosliny = p_id_rosliny;
+        
+        COMMIT;
+    EXCEPTION
+        WHEN OTHERS THEN
+            ROLLBACK;
+            IF SQLCODE NOT IN (-20005, -20006) THEN
+                RAISE_APPLICATION_ERROR(-20007, 'Bï¿½ï¿½d podczas aktualizacji stanu zdrowia: ' || SQLERRM);
+            ELSE
+                RAISE;
+            END IF;
+    END aktualizuj_stan_zdrowia;
+
+    FUNCTION pobierz_wiek_rosliny(
+        p_id_rosliny NUMBER
+    ) RETURN NUMBER IS
+        v_wiek NUMBER;
+    BEGIN
+        SELECT r.wiek() INTO v_wiek
+        FROM rosliny r
+        WHERE r.id_rosliny = p_id_rosliny;
+        
+        RETURN v_wiek;
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            RAISE_APPLICATION_ERROR(-20005, 'Nie znaleziono rosliny o podanym ID');
+        WHEN OTHERS THEN
+            RAISE_APPLICATION_ERROR(-20006, 'Blad podczas pobierania wieku rosliny: ' || SQLERRM);
+    END pobierz_wiek_rosliny;
+
+    FUNCTION pobierz_koszt_utrzymania(
+        p_id_rosliny NUMBER
+    ) RETURN NUMBER IS
+        v_koszt NUMBER;
+    BEGIN
+        SELECT r.koszt_utrzymania() INTO v_koszt
+        FROM rosliny r
+        WHERE r.id_rosliny = p_id_rosliny;
+        
+        RETURN v_koszt;
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            RAISE_APPLICATION_ERROR(-20007, 'Nie znaleziono rosliny o podanym ID');
+        WHEN OTHERS THEN
+            RAISE_APPLICATION_ERROR(-20008, 'Blad podczas pobierania kosztu utrzymania: ' || SQLERRM);
+    END pobierz_koszt_utrzymania;
+
+    FUNCTION pobierz_historie_zabiegow(
+        p_id_rosliny NUMBER
+    ) RETURN zabiegi_tab_t IS
+        v_zabiegi zabiegi_tab_t;
+    BEGIN
+        SELECT r.zabiegi INTO v_zabiegi
+        FROM rosliny r
+        WHERE r.id_rosliny = p_id_rosliny;
+        
+        RETURN v_zabiegi;
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            RAISE_APPLICATION_ERROR(-20009, 'Nie znaleziono rosliny o podanym ID');
+        WHEN OTHERS THEN
+            RAISE_APPLICATION_ERROR(-20010, 'Blad podczas pobierania historii zabiegow: ' || SQLERRM);
+    END pobierz_historie_zabiegow;
 END zarzadzanie_roslinami;
 /
 
--- Pakiet do zarz¹dzania pracownikami
+-- pakiet do zarzadzania pracownikami
 CREATE OR REPLACE PACKAGE zarzadzanie_pracownikami AS
-    -- Dodawanie nowego pracownika
+    -- dodawanie nowego pracownika
     PROCEDURE dodaj_pracownika(
         p_imie VARCHAR2,
         p_nazwisko VARCHAR2,
@@ -310,18 +479,18 @@ CREATE OR REPLACE PACKAGE zarzadzanie_pracownikami AS
         p_email VARCHAR2
     );
     
-    -- Przypisanie harmonogramu do pracownika
+    -- przypisanie harmonogramu do pracownika
     PROCEDURE przypisz_harmonogram(
         p_pracownik_id NUMBER,
         p_harmonogram_id NUMBER
     );
     
-    -- Pobranie listy roœlin pod opiek¹ pracownika
+    -- pobranie listy roslin pod opieka pracownika
     FUNCTION pobierz_rosliny_pracownika(
         p_pracownik_id NUMBER
     ) RETURN SYS_REFCURSOR;
     
-    -- Aktualizacja danych kontaktowych
+    -- aktualizacja danych kontaktowych
     PROCEDURE aktualizuj_dane_kontaktowe(
         p_pracownik_id NUMBER,
         p_telefon VARCHAR2,
@@ -330,7 +499,7 @@ CREATE OR REPLACE PACKAGE zarzadzanie_pracownikami AS
 END zarzadzanie_pracownikami;
 /
 
--- Implementacja pakietu zarz¹dzania pracownikami
+-- implementacja pakietu zarzadzania pracownikami
 CREATE OR REPLACE PACKAGE BODY zarzadzanie_pracownikami AS
     PROCEDURE dodaj_pracownika(
         p_imie VARCHAR2,
@@ -341,10 +510,10 @@ CREATE OR REPLACE PACKAGE BODY zarzadzanie_pracownikami AS
     ) IS
         v_id NUMBER;
     BEGIN
-        -- Generujemy nowe ID
+        -- generujemy nowe ID
         SELECT NVL(MAX(id_pracownika), 0) + 1 INTO v_id FROM pracownicy;
         
-        -- Wstawiamy nowego pracownika
+        -- wstawiamy nowego pracownika
         INSERT INTO pracownicy VALUES (
             pracownik_t(
                 v_id,
@@ -352,7 +521,7 @@ CREATE OR REPLACE PACKAGE BODY zarzadzanie_pracownikami AS
                 p_nazwisko,
                 p_stanowisko,
                 SYSDATE,
-                NULL, -- harmonogram pocz¹tkowo pusty
+                NULL, -- harmonogram poczatkowo pusty
                 p_telefon,
                 p_email
             )
@@ -361,7 +530,7 @@ CREATE OR REPLACE PACKAGE BODY zarzadzanie_pracownikami AS
     EXCEPTION
         WHEN OTHERS THEN
             ROLLBACK;
-            RAISE_APPLICATION_ERROR(-20003, 'B³¹d podczas dodawania pracownika: ' || SQLERRM);
+            RAISE_APPLICATION_ERROR(-20003, 'Blad podczas dodawania pracownika: ' || SQLERRM);
     END dodaj_pracownika;
 
     PROCEDURE przypisz_harmonogram(
@@ -370,11 +539,11 @@ CREATE OR REPLACE PACKAGE BODY zarzadzanie_pracownikami AS
     ) IS
         v_harmonogram_ref REF harmonogram_t;
     BEGIN
-        -- Pobieramy referencjê do harmonogramu
+        -- pobieramy referencje do harmonogramu
         SELECT REF(h) INTO v_harmonogram_ref
         FROM harmonogramy h WHERE h.id_harmonogramu = p_harmonogram_id;
         
-        -- Aktualizujemy harmonogram pracownika
+        -- aktualizujemy harmonogram pracownika
         UPDATE pracownicy p
         SET p.harmonogram = v_harmonogram_ref
         WHERE p.id_pracownika = p_pracownik_id;
@@ -383,7 +552,7 @@ CREATE OR REPLACE PACKAGE BODY zarzadzanie_pracownikami AS
     EXCEPTION
         WHEN OTHERS THEN
             ROLLBACK;
-            RAISE_APPLICATION_ERROR(-20004, 'B³¹d podczas przypisywania harmonogramu: ' || SQLERRM);
+            RAISE_APPLICATION_ERROR(-20004, 'Blad podczas przypisywania harmonogramu: ' || SQLERRM);
     END przypisz_harmonogram;
 
     FUNCTION pobierz_rosliny_pracownika(
@@ -399,6 +568,288 @@ CREATE OR REPLACE PACKAGE BODY zarzadzanie_pracownikami AS
         RETURN v_cursor;
     END pobierz_rosliny_pracownika;
 
-    -- Pozosta³e implementacje funkcji...
+    PROCEDURE aktualizuj_dane_kontaktowe(
+        p_pracownik_id NUMBER,
+        p_telefon VARCHAR2,
+        p_email VARCHAR2
+    ) IS
+        v_count NUMBER;
+    BEGIN
+        -- Sprawdzenie czy pracownik istnieje
+        SELECT COUNT(*)
+        INTO v_count
+        FROM pracownicy
+        WHERE id_pracownika = p_pracownik_id;
+        
+        IF v_count = 0 THEN
+            RAISE_APPLICATION_ERROR(-20001, 'Nie znaleziono pracownika o ID: ' || p_pracownik_id);
+        END IF;
+        
+        -- Aktualizacja danych kontaktowych
+        UPDATE pracownicy p
+        SET p.telefon = p_telefon,
+            p.email = p_email
+        WHERE p.id_pracownika = p_pracownik_id;
+        
+        COMMIT;
+    EXCEPTION
+        WHEN OTHERS THEN
+            ROLLBACK;
+            RAISE_APPLICATION_ERROR(-20002, 'Bï¿½ï¿½d podczas aktualizacji danych kontaktowych: ' || SQLERRM);
+    END aktualizuj_dane_kontaktowe;
+
 END zarzadzanie_pracownikami;
 /
+
+
+CREATE USER botanic_garden IDENTIFIED BY 12345;
+GRANT CREATE SESSION, CREATE TABLE, CREATE TRIGGER, CREATE SEQUENCE TO botanic_garden;
+GRANT UNLIMITED TABLESPACE TO botanic_garden;
+
+CONNECT botanic_garden/12345;
+
+ALTER SESSION SET CURRENT_SCHEMA = botanic_garden;
+--triggery
+SHOW USER;
+SET SERVEROUTPUT ON;
+CREATE OR REPLACE TRIGGER trg_roslina_audit
+AFTER INSERT OR UPDATE OR DELETE ON rosliny
+FOR EACH ROW
+DECLARE
+    v_operacja VARCHAR2(10);
+BEGIN
+    IF INSERTING THEN
+        v_operacja := 'INSERT';
+    ELSIF UPDATING THEN
+        v_operacja := 'UPDATE';
+    ELSE
+        v_operacja := 'DELETE';
+    END IF;
+    
+    -- tutaj mozna logowac do tabeli audytowej
+    -- dla demonstracji uzyjemy dbms_output
+    DBMS_OUTPUT.PUT_LINE('Operacja ' || v_operacja || ' na roslinie ID: ' || 
+        CASE 
+            WHEN INSERTING OR UPDATING THEN :NEW.id_rosliny
+            ELSE :OLD.id_rosliny
+        END);
+END;
+/
+
+SELECT object_name, object_type 
+FROM user_objects 
+WHERE object_type IN ('TABLE', 'TYPE');
+
+SELECT object_name, object_type, status 
+FROM user_objects 
+WHERE object_name LIKE 'ZARZADZANIE%';
+
+-- przyklad wstawiania danych z referencjami
+DECLARE
+    v_strefa_ref REF strefa_klimatyczna_t;
+    v_lok_ref REF lokalizacja_t;
+BEGIN
+    -- Najpierw usuï¿½my istniejï¿½ce dane (w odwrotnej kolejnoï¿½ci niï¿½ zaleï¿½noï¿½ci)
+    DELETE FROM rosliny;
+    DELETE FROM pracownicy;
+    DELETE FROM dostawcy;
+    DELETE FROM gatunki;
+    DELETE FROM lokalizacje;
+    DELETE FROM strefy_klimatyczne;
+    
+    -- Wstawianie strefy klimatycznej
+    INSERT INTO strefy_klimatyczne VALUES (
+        strefa_klimatyczna_t(1, 'Strefa umiarkowana', 0, 25, 70)
+    );
+    
+    -- Pobieranie referencji do strefy klimatycznej
+    SELECT REF(s) INTO v_strefa_ref
+    FROM strefy_klimatyczne s
+    WHERE s.id_strefy = 1;
+    
+    -- Wstawianie lokalizacji
+    INSERT INTO lokalizacje VALUES (
+        lokalizacja_t(1, 'Szklarnia pï¿½nocna', 100, v_strefa_ref, 'Szklarnia z kontrolowanï¿½ temperaturï¿½')
+    );
+    
+    -- Wstawianie gatunku
+    INSERT INTO gatunki VALUES (
+        gatunek_t(1, 'Phalaenopsis amabilis', 'Storczyk biaï¿½y', 'kwiat', 'Orchidaceae',
+        'Popularny storczyk o biaï¿½ych kwiatach')
+    );
+    
+    -- Wstawianie dostawcy
+    INSERT INTO dostawcy VALUES (
+        dostawca_t(1, 'GreenHouse Sp. z o.o.', '1234567890',
+        'ul. Ogrodowa 1, Warszawa', '123456789', 'kontakt@greenhouse.pl')
+    );
+    
+    -- Wstawianie pracownika
+    INSERT INTO pracownicy VALUES (
+        pracownik_t(1, 'Jan', 'Kowalski', 'Ogrodnik', SYSDATE, NULL, '111222333', 'jan.kowalski@ogrod.pl')
+    );
+    
+    -- Teraz moï¿½emy dodaï¿½ roï¿½linï¿½
+    zarzadzanie_roslinami.dodaj_rosline(
+        'Storczyk niebieski',
+        1, -- gatunek_id
+        1, -- lokalizacja_id
+        1, -- pracownik_id
+        1, -- dostawca_id
+        30  -- wysokoï¿½ï¿½
+    );
+    
+    COMMIT;
+    DBMS_OUTPUT.PUT_LINE('Dane zostaï¿½y pomyï¿½lnie dodane');
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        DBMS_OUTPUT.PUT_LINE('Wystï¿½piï¿½ bï¿½ï¿½d: ' || SQLERRM);
+END;
+/
+
+-- przyklad danych testowych
+DECLARE
+    v_strefa_ref1 REF strefa_klimatyczna_t;
+    v_strefa_ref2 REF strefa_klimatyczna_t;
+    v_lok_ref1 REF lokalizacja_t;
+    v_lok_ref2 REF lokalizacja_t;
+    v_gatunek_ref1 REF gatunek_t;
+    v_harmonogram_ref1 REF harmonogram_t;
+    v_pracownik_ref1 REF pracownik_t;
+    v_dostawca_ref1 REF dostawca_t;
+    
+    -- zmienne pomocnicze
+    v_zabieg zabieg_t;
+    v_etykieta etykieta_t;
+    v_zagrozenie zagrozenie_t;
+    v_sezon sezon_t;
+    v_cursor SYS_REFCURSOR;
+    v_roslina_id NUMBER;
+    v_koszt NUMBER;
+BEGIN
+    -- 1. Wstawianie stref klimatycznych
+    INSERT INTO strefy_klimatyczne VALUES (
+        strefa_klimatyczna_t(101, 'Strefa tropikalna', 20, 35, 80)
+    );
+    
+    INSERT INTO strefy_klimatyczne VALUES (
+        strefa_klimatyczna_t(102, 'Strefa umiarkowana', 5, 25, 60)
+    );
+    
+    -- Pobieranie referencji do stref
+    SELECT REF(s) INTO v_strefa_ref1
+    FROM strefy_klimatyczne s
+    WHERE s.id_strefy = 101;
+    
+    SELECT REF(s) INTO v_strefa_ref2
+    FROM strefy_klimatyczne s
+    WHERE s.id_strefy = 102;
+
+    -- 2. Wstawianie lokalizacji
+    INSERT INTO lokalizacje VALUES (
+        lokalizacja_t(101, 'Szklarnia tropikalna', 200, v_strefa_ref1, 'Szklarnia dla roï¿½lin tropikalnych')
+    );
+    
+    INSERT INTO lokalizacje VALUES (
+        lokalizacja_t(102, 'Ogrï¿½d zewnï¿½trzny', 500, v_strefa_ref2, 'Przestrzeï¿½ dla roï¿½lin strefy umiarkowanej')
+    );
+    
+    -- Pobieranie referencji do lokalizacji
+    SELECT REF(l) INTO v_lok_ref1
+    FROM lokalizacje l
+    WHERE l.id_lokalizacji = 101;
+    
+    SELECT REF(l) INTO v_lok_ref2
+    FROM lokalizacje l
+    WHERE l.id_lokalizacji = 102;
+
+    -- 3. Wstawianie gatunkï¿½w
+    INSERT INTO gatunki VALUES (
+        gatunek_t(101, 'Phalaenopsis amabilis', 'Storczyk biaï¿½y', 'kwiat', 'Orchidaceae',
+        'Popularny storczyk o biaï¿½ych kwiatach')
+    );
+    
+    INSERT INTO gatunki VALUES (
+        gatunek_t(102, 'Ficus benjamina', 'Figowiec benjamina', 'drzewo', 'Moraceae',
+        'Popularne drzewo doniczkowe')
+    );
+    
+    -- Pobieranie referencji do gatunku
+    SELECT REF(g) INTO v_gatunek_ref1
+    FROM gatunki g
+    WHERE g.id_gatunku = 101;
+
+    -- 4. Wstawianie harmonogramï¿½w
+    INSERT INTO harmonogramy VALUES (
+        harmonogram_t(101, TO_DATE('2024-01-01', 'YYYY-MM-DD'),
+        TO_DATE('2024-12-31', 'YYYY-MM-DD'), '08:00', '16:00')
+    );
+    
+    -- Pobieranie referencji do harmonogramu
+    SELECT REF(h) INTO v_harmonogram_ref1
+    FROM harmonogramy h
+    WHERE h.id_harmonogramu = 101;
+
+    -- 5. Wstawianie dostawcï¿½w
+    INSERT INTO dostawcy VALUES (
+        dostawca_t(101, 'GreenHouse Sp. z o.o.', '1234567890',
+        'ul. Ogrodowa 1, Warszawa', '123456789', 'kontakt@greenhouse.pl')
+    );
+    
+    -- Pobieranie referencji do dostawcy
+    SELECT REF(d) INTO v_dostawca_ref1
+    FROM dostawcy d
+    WHERE d.id_dostawcy = 101;
+
+    -- 6. Dodawanie pracownikï¿½w przez pakiet
+    zarzadzanie_pracownikami.dodaj_pracownika(
+        'Jan', 'Kowalski', 'Ogrodnik', '111222333', 'jan.kowalski@ogrod.pl'
+    );
+    
+    -- Przypisanie harmonogramu do pracownika
+    zarzadzanie_pracownikami.przypisz_harmonogram(101, 101);
+    
+    -- 7. Dodawanie roï¿½lin przez pakiet
+    BEGIN
+        zarzadzanie_roslinami.dodaj_rosline(
+            'Storczyk Biaï¿½y #1',
+            101, -- gatunek_id
+            101, -- lokalizacja_id
+            101, -- pracownik_id
+            101, -- dostawca_id
+            30  -- wysokoï¿½ï¿½
+        );
+    END;
+    
+    COMMIT;
+    DBMS_OUTPUT.PUT_LINE('Wszystkie dane testowe zostaï¿½y pomyï¿½lnie dodane');
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        DBMS_OUTPUT.PUT_LINE('Wystï¿½piï¿½ bï¿½ï¿½d podczas dodawania danych testowych: ' || SQLERRM);
+        RAISE;
+END;
+/
+
+-- przyklad zapytan demonstracyjnych
+-- 1. pobranie wszystkich roslin wraz z ich lokalizacjami
+SELECT r.id_rosliny, r.nazwa, 
+       DEREF(r.lokalizacja).nazwa as lokalizacja,
+       DEREF(r.gatunek).nazwa_lacinska as gatunek
+FROM rosliny r;
+
+-- 2. pobranie wszystkich pracownikow i ich harmonogramow
+SELECT p.imie, p.nazwisko, 
+       DEREF(p.harmonogram).godziny_od as godziny_od,
+       DEREF(p.harmonogram).godziny_do as godziny_do
+FROM pracownicy p;
+
+-- 3. pobranie roslin z ich zabiegami
+SELECT r.nazwa, z.*
+FROM rosliny r, TABLE(r.zabiegi) z;
+
+-- 4. pobranie roslin w okreslonej strefie klimatycznej
+SELECT r.nazwa, DEREF(r.lokalizacja).nazwa as lokalizacja,
+       DEREF(DEREF(r.lokalizacja).strefa).nazwa as strefa_klimatyczna
+FROM rosliny r;
